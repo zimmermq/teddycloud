@@ -15,6 +15,12 @@
 #define SSE_MAX_CHANNELS 8
 #define SSE_TIMEOUT_S 60
 #define SSE_KEEPALIVE_S 15
+/* Send timeout for a subscriber's connection. Events are written to every
+ * subscriber with the SSE locks held, so a subscriber that stops reading holds
+ * up all others (and the box connection sending the event) until a write to it
+ * gets nothing out for this long. Must stay well below SSE_TIMEOUT_S, or that
+ * one blocked write makes every other subscriber look dead. */
+#define SSE_SEND_TIMEOUT_MS 2000
 
 typedef struct
 {

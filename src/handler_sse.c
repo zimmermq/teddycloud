@@ -55,6 +55,8 @@ error_t handleApiSse(HttpConnection *connection, const char_t *uri, const char_t
         return error;
     }
 
+    socketSetTimeout(connection->socket, SSE_SEND_TIMEOUT_MS);
+
     sseCtx->lastConnection = time(NULL);
     sseCtx->connection = connection;
     sseCtx->active = TRUE;
@@ -80,7 +82,11 @@ error_t handleApiSse(HttpConnection *connection, const char_t *uri, const char_t
         mutex_lock(MUTEX_SSE_CTX);
         if (sseCtx->error != NO_ERROR || sseCtx->active == FALSE || (sseCtx->lastConnection + SSE_TIMEOUT_S < time(NULL)))
         {
-            httpFlushStream(connection);
+            /* closing a stream whose write failed would block again for the send timeout */
+            if (sseCtx->error == NO_ERROR)
+            {
+                httpFlushStream(connection);
+            }
             sseCtx->active = FALSE;
             error = sseCtx->error;
             sseSubscriptionCount--;
@@ -163,7 +169,11 @@ error_t sse_rawData(const char *content)
     for (uint8_t channel = 0; channel < SSE_MAX_CHANNELS; channel++)
     {
         SseSubscriptionContext *sseCtx = &sseSubs[channel];
-        if (!sseCtx->active)
+        /* A subscriber whose write failed is skipped until its own loop removes it.
+         * Writing to it again would block for the full send timeout each time,
+         * with the SSE locks held: every other subscriber, and whoever sends the
+         * event (for box events the box's RTNL connection), would wait for it. */
+        if (!sseCtx->active || sseCtx->error != NO_ERROR)
         {
             continue;
         }
