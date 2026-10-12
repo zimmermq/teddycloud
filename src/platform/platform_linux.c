@@ -205,8 +205,8 @@ error_t socketConnect(Socket *socket, const IpAddr *remoteIpAddr,
 error_t socketSend(Socket *socket, const void *data, size_t length,
                    size_t *written, uint_t flags)
 {
-    int_t n;
-    error_t error;
+    error_t error = NO_ERROR;
+    size_t total = 0;
 
     /* this is meant as a flush. not needed/possible? */
     if (!length)
@@ -214,24 +214,22 @@ error_t socketSend(Socket *socket, const void *data, size_t length,
         return NO_ERROR;
     }
 
-    // Send data
-    n = send(socket->descriptor, data, length, MSG_NOSIGNAL);
+    /* Callers rely on all data being sent unless an error is returned (many pass
+     * written = NULL). send() returns early with part of the data when the send
+     * timeout expires while the peer is still taking data, so keep sending; only a
+     * send() that gets nothing out within the timeout ends it with ERROR_TIMEOUT. */
+    while (total < length)
+    {
+        int_t n = send(socket->descriptor, (const uint8_t *)data + total, length - total, MSG_NOSIGNAL);
 
-    // Check return value
-    if (n > 0)
-    {
-        // Total number of data that have been written
-        if (written)
+        if (n > 0)
         {
-            *written = n;
+            total += n;
+            continue;
         }
-        // Successful write operation
-        error = NO_ERROR;
-    }
-    else
-    {
+
         // Timeout error?
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
         {
             error = ERROR_TIMEOUT;
         }
@@ -239,6 +237,13 @@ error_t socketSend(Socket *socket, const void *data, size_t length,
         {
             error = ERROR_WRITE_FAILED;
         }
+        break;
+    }
+
+    // Total number of data that have been written
+    if (written)
+    {
+        *written = total;
     }
 
     return error;

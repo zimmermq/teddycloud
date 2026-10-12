@@ -9,4 +9,6 @@ void test_hex_encode(void);
 void test_escape_string(void);
 void test_split_url(void);
 void test_ipv4_is_public(void);
+void test_socket_send_slow_peer_gets_everything(void);
+void test_socket_send_stalled_peer_times_out(void);
 void test_esp32_port_patch(void);
